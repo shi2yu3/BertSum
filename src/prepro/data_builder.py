@@ -18,6 +18,11 @@ from others.utils import clean
 from prepro.utils import _get_word_ngrams
 
 
+# dm_single_close_quote = u'\u2019' # unicode
+# dm_double_close_quote = u'\u201d'
+# END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"] # acceptable ways to end a sentence
+END_TOKENS = ['.', '!', '?'] # acceptable ways to end a sentence
+
 def load_json(p, lower):
     source = []
     tgt = []
@@ -28,7 +33,7 @@ def load_json(p, lower):
             tokens = [t.lower() for t in tokens]
         if (tokens[0] == '@highlight'):
             flag = True
-            continue
+            # continue
         if (flag):
             tgt.append(tokens)
             flag = False
@@ -59,6 +64,49 @@ def cal_rouge(evaluated_ngrams, reference_ngrams):
 
     f1_score = 2.0 * ((precision * recall) / (precision + recall + 1e-8))
     return {"f": f1_score, "p": precision, "r": recall}
+
+
+def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
+    def _rouge_clean(s):
+        return re.sub(r'[^a-zA-Z0-9 #]', '', s)
+
+    max_rouge = [-1.0] * len(abstract_sent_list)
+    max_idx = [[-1]] * len(abstract_sent_list)
+    # abstract = sum(abstract_sent_list, [])
+    abstract = [_rouge_clean(' '.join(a)).split() for a in abstract_sent_list]
+    sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
+    evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
+    reference_1grams = [_get_word_ngrams(1, [a]) for a in abstract]
+    evaluated_2grams = [_get_word_ngrams(2, [sent]) for sent in sents]
+    reference_2grams = [_get_word_ngrams(2, [a]) for a in abstract]
+
+    impossible_sents = []
+    for s in range(summary_size):
+        combinations = itertools.combinations([i for i in range(len(sents)) if i not in impossible_sents], s + 1)
+        for c in combinations:
+            candidates_1 = [evaluated_1grams[idx] for idx in c]
+            candidates_1 = set.union(*map(set, candidates_1))
+            candidates_2 = [evaluated_2grams[idx] for idx in c]
+            candidates_2 = set.union(*map(set, candidates_2))
+            best_match_idx = -1
+            best_match_rouge = 0.0
+            for i in range(len(reference_1grams)):
+                rouge_1 = cal_rouge(candidates_1, reference_1grams[i])['f']
+                rouge_2 = cal_rouge(candidates_2, reference_2grams[i])['f']
+                rouge_score = rouge_1 + rouge_2
+                if rouge_score > best_match_rouge:
+                    best_match_idx = i
+                    best_match_rouge = rouge_score
+            if (s == 0 and best_match_idx == -1):
+                impossible_sents.append(c[0])
+            if best_match_rouge > max_rouge[best_match_idx]:
+                max_idx[best_match_idx] = list(c)
+                max_rouge[best_match_idx] = best_match_rouge
+
+    for i in range(len(max_idx)):
+        if max_idx[i] is not [-1]:
+            print(f"Combination {max_idx[i]}, highlight {i}, rouge score {max_rouge[i]}")
+    return max_idx, max_rouge
 
 
 def combination_selection(doc_sent_list, abstract_sent_list, summary_size):
@@ -205,7 +253,8 @@ def format_to_bert(args):
     for corpus_type in datasets:
         a_lst = []
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
-            real_name = json_f.split('/')[-1]
+            # real_name = json_f.split('/')[-1]
+            real_name = os.path.basename(json_f)
             a_lst.append((json_f, args, pjoin(args.save_path, real_name.replace('json', 'bert.pt'))))
         print(a_lst)
         pool = Pool(args.n_cpus)
@@ -284,7 +333,8 @@ def format_to_lines(args):
         corpus_mapping[corpus_type] = {key.strip(): 1 for key in temp}
     train_files, valid_files, test_files = [], [], []
     for f in glob.glob(pjoin(args.raw_path, '*.json')):
-        real_name = f.split('/')[-1].split('.')[0]
+        # real_name = f.split('/')[-1].split('.')[0]
+        real_name = os.path.splitext(os.path.splitext(os.path.basename(f))[0])[0]
         if (real_name in corpus_mapping['valid']):
             valid_files.append(f)
         elif (real_name in corpus_mapping['test']):
@@ -324,3 +374,113 @@ def _format_to_lines(params):
     print(f)
     source, tgt = load_json(f, args.lower)
     return {'src': source, 'tgt': tgt}
+
+
+def fix_missing_period(args):
+    input_dir = os.path.abspath(args.raw_path)
+    output_dir = os.path.abspath(args.save_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    print("Fixing missing period in %s and saving in %s..." % (input_dir, output_dir))
+    stories = os.listdir(input_dir)
+    for s in stories:
+        if (not s.endswith('story')):
+            continue
+        _fix_missing_period(os.path.join(input_dir, s), os.path.join(output_dir, s))
+
+    # Check that the tokenized stories directory contains the same number of files as the original directory
+    num_inputs = len(os.listdir(input_dir))
+    num_outputs = len(os.listdir(output_dir))
+    if num_inputs != num_outputs:
+        raise Exception(
+            "The output directory %s contains %i files, but it should contain the same number as %s (which has %i files). Was there an error during processing?" % (
+            output_dir, num_outputs, input_dir, num_inputs))
+    print("Successfully finished fixing missing period %s to %s.\n" % (input_dir, output_dir))
+
+
+def _fix_missing_period(s, t):
+    """Adds a period to a line that is missing a period"""
+    print(s)
+    lines = []
+    with open(s, "r", encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and "@highlight" not in line.lower() and line[-1] not in END_TOKENS:
+                line += " ."
+            lines.append(line)
+
+    with open(t, "w", encoding='utf-8') as f:
+        f.write("\n".join(lines))
+
+
+def extractive_oracle(args):
+    if (args.dataset != ''):
+        datasets = [args.dataset]
+    else:
+        datasets = ['train', 'valid', 'test']
+    for corpus_type in datasets:
+        a_lst = []
+        for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
+            real_name = os.path.basename(json_f)
+            a_lst.append((json_f, args, pjoin(args.save_path, real_name)))
+        print(a_lst)
+        pool = Pool(args.n_cpus)
+        for d in pool.imap(_extractive_oracle, a_lst):
+            pass
+
+        pool.close()
+        pool.join()
+
+
+def _extractive_oracle(params):
+    json_file, args, save_file = params
+    if (os.path.exists(save_file)):
+        logger.info('Ignore %s' % save_file)
+        return
+
+    bert = BertData(args)
+
+    logger.info('Processing %s' % json_file)
+    jobs = json.load(open(json_file))
+    oracle_selections = [[0 for col in range(3)] for row in range(20)]
+    for d in jobs:
+        source, tgt = d['src'], d['tgt']
+        source = [bert.tokenizer.tokenize(' '.join(s)) for s in source]
+        tgt = [bert.tokenizer.tokenize(' '.join(t)) for t in tgt]
+        for s in source: print(s)
+        print('-' * 8)
+        for t in tgt: print(t)
+        if (args.oracle_mode == 'greedy'):
+            oracle_ids = greedy_selection(source, tgt, 3)
+        elif (args.oracle_mode == 'combination'):
+            oracle_ids = combination_selection(source, tgt, 3)
+        elif (args.oracle_mode == 'separate'):
+            oracle_ids, oracle_rouges = separate_selection(source, tgt, 3)
+            for i in range(len(oracle_ids)):
+                idx1 = int(oracle_rouges[i] * 10)
+                idx2 = len(oracle_ids[i])
+                oracle_selections[idx1][idx2 - 1] += 1
+                print("%s" % "    ".join([str(i + 1) for i in range(3)]))
+                for rouge_idx in range(len(oracle_selections)):
+                    s = ""
+                    for comb_idx in range(len(oracle_selections[rouge_idx])):
+                        c = oracle_selections[rouge_idx][comb_idx]
+                        t = sum(oracle_selections[rouge_idx])
+                        if t != 0:
+                            s += "  %d(%.1f%%)" % (c, c / t * 100)
+                    print("  %.1f%s" % (rouge_idx / 10, s))
+
+    logger.info('Saving to %s' % save_file)
+    # with open(save_file, "w") as f:
+    print("%s" % "    ".join([str(i + 1) for i in range(3)]))
+    for rouge_idx in oracle_selections:
+        s = ""
+        for comb_idx in oracle_selections[rouge_idx]:
+            c = oracle_selections[rouge_idx][comb_idx]
+            t = sum(oracle_selections[rouge_idx].values())
+            if t != 0:
+                s += "  %d(%.1f%%)" % (c, c / t * 100)
+        print("  %d%s", rouge_idx, s)
+        # f.write()
+
+
