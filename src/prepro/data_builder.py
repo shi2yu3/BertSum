@@ -248,7 +248,7 @@ def format_to_bert(args):
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
             real_name = os.path.basename(json_f)
             a_lst.append((json_f, args, pjoin(args.save_path, real_name.replace('json', 'bert.pt'))))
-        print(a_lst)
+        logger.info(a_lst)
         pool = Pool(args.n_cpus)
         for d in pool.imap(_format_to_bert, a_lst):
             pass
@@ -262,19 +262,19 @@ def tokenize(args):
     tokenized_stories_dir = os.path.abspath(args.save_path)
     os.makedirs(tokenized_stories_dir, exist_ok=True)
 
-    print("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
+    logger.info("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
     stories = os.listdir(stories_dir)
     # make IO list file
-    print("Making list of files to tokenize...")
+    logger.info("Making list of files to tokenize...")
     with open("mapping_for_corenlp.txt", "w") as f:
         for s in stories:
             if (not s.endswith('story')):
                 continue
             f.write("%s\n" % (os.path.join(stories_dir, s)))
     command = ['java', 'edu.stanford.nlp.pipeline.StanfordCoreNLP' ,'-annotators', 'tokenize,ssplit', '-filelist', 'mapping_for_corenlp.txt', '-outputFormat', 'json', '-outputDirectory', tokenized_stories_dir]
-    print("Tokenizing %i files in %s and saving in %s..." % (len(stories), stories_dir, tokenized_stories_dir))
+    logger.info("Tokenizing %i files in %s and saving in %s..." % (len(stories), stories_dir, tokenized_stories_dir))
     subprocess.call(command)
-    print("Stanford CoreNLP Tokenizer has finished.")
+    logger.info("Stanford CoreNLP Tokenizer has finished.")
     os.remove("mapping_for_corenlp.txt")
 
     # Check that the tokenized stories directory contains the same number of files as the original directory
@@ -284,7 +284,7 @@ def tokenize(args):
         raise Exception(
             "The tokenized stories directory %s contains %i files, but it should contain the same number as %s (which has %i files). Was there an error during tokenization?" % (
             tokenized_stories_dir, num_tokenized, stories_dir, num_orig))
-    print("Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir))
+    logger.info("Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir))
 
 
 def _format_to_bert(params):
@@ -360,7 +360,7 @@ def format_to_lines(args):
 
 def _format_to_lines(params):
     f, args = params
-    print(f)
+    logger.info(f)
     docId, source, tgt = load_json(f, args.lower)
     return {'docId': docId, 'src': source, 'tgt': tgt}
 
@@ -370,7 +370,7 @@ def fix_missing_period(args):
     output_dir = os.path.abspath(args.save_path)
     os.makedirs(output_dir, exist_ok=True)
 
-    print("Fixing missing period in %s and saving in %s..." % (input_dir, output_dir))
+    logger.info("Fixing missing period in %s and saving in %s..." % (input_dir, output_dir))
     stories = os.listdir(input_dir)
     for s in stories:
         if (not s.endswith('story')):
@@ -384,12 +384,12 @@ def fix_missing_period(args):
         raise Exception(
             "The output directory %s contains %i files, but it should contain the same number as %s (which has %i files). Was there an error during processing?" % (
             output_dir, num_outputs, input_dir, num_inputs))
-    print("Successfully finished fixing missing period %s to %s.\n" % (input_dir, output_dir))
+    logger.info("Successfully finished fixing missing period %s to %s.\n" % (input_dir, output_dir))
 
 
 def _fix_missing_period(s, t):
     """Adds a period to a line that is missing a period"""
-    print(s)
+    logger.info(s)
     lines = []
     with open(s, "r", encoding='utf-8') as f:
         for line in f:
@@ -412,7 +412,7 @@ def analysis(args):
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
             real_name = os.path.basename(json_f)
             a_lst.append((json_f, args, pjoin(args.save_path, real_name)))
-        print(a_lst)
+        logger.info(a_lst)
         pool = Pool(args.n_cpus)
         for d in pool.imap(_analysis, a_lst):
             pass
@@ -444,7 +444,7 @@ def _analysis(params):
             stats['highlight'][r][f"#{j}-sentence highlights"] = 0
 
     dataset = []
-    for d in jobs:
+    for num, d in enumerate(jobs):
         source, tgt = d['src'], d['tgt']
         if args.lower:
             source = [' '.join(s).lower().split() for s in source]
@@ -470,6 +470,26 @@ def _analysis(params):
             stats['document']['#documents with overlapped highlights'] += 1
         stats['document']['#documents'] += 1
 
+        if (num + 1) % 10:
+            highlight_stats = stats['highlight']
+            highlight_stats['rouge all']['#highlights'] = 0
+            highlight_stats['rouge all']['#single-segment highlights'] = 0
+            highlight_stats['rouge all']['#multi-segment highlights'] = 0
+            for i in range(4):
+                highlight_stats['rouge all'][f"#{i}-sentence highlights"] = 0
+            for i in range(11):
+                r = f"rouge {i / 10:.1f}"
+                highlight_stats['rouge all']['#highlights'] += highlight_stats[r]['#highlights']
+                highlight_stats['rouge all']['#single-segment highlights'] += highlight_stats[r][
+                    '#single-segment highlights']
+                highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r][
+                    '#multi-segment highlights']
+                for i in range(4):
+                    highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][
+                        f"#{i}-sentence highlights"]
+            logger.info('Saving partial results to %s' % save_file)
+            json.dump([stats] + dataset, open(save_file, "w"), indent=2)
+
     highlight_stats = stats['highlight']
     highlight_stats['rouge all']['#highlights'] = 0
     highlight_stats['rouge all']['#single-segment highlights'] = 0
@@ -483,9 +503,8 @@ def _analysis(params):
         highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r]['#multi-segment highlights']
         for i in range(4):
             highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][f"#{i}-sentence highlights"]
-    dataset = [stats] + dataset
 
     logger.info('Saving to %s' % save_file)
-    json.dump(dataset, open(save_file, "w"), indent=2)
+    json.dump([stats] + dataset, open(save_file, "w"), indent=2)
 
 
