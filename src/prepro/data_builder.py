@@ -24,7 +24,8 @@ def load_json(p, lower):
     source = []
     tgt = []
     flag = False
-    for sent in json.load(open(p, encoding='utf-8'))['sentences']:
+    data = json.load(open(p, encoding='utf-8'))
+    for sent in data['sentences']:
         tokens = [t['word'] for t in sent['tokens']]
         if (lower):
             tokens = [t.lower() for t in tokens]
@@ -38,7 +39,7 @@ def load_json(p, lower):
 
     source = [clean(' '.join(sent)).split() for sent in source]
     tgt = [clean(' '.join(sent)).split() for sent in tgt]
-    return source, tgt
+    return data['docId'], source, tgt
 
 
 def cal_rouge(evaluated_ngrams, reference_ngrams):
@@ -68,7 +69,6 @@ def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
 
     max_rouge = [0.0] * len(abstract_sent_list)
     max_idx = [[]] * len(abstract_sent_list)
-    # abstract = sum(abstract_sent_list, [])
     abstract = [_rouge_clean(' '.join(a)).split() for a in abstract_sent_list]
     sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
     evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
@@ -99,8 +99,6 @@ def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
                 max_idx[best_match_idx] = list(c)
                 max_rouge[best_match_idx] = best_match_rouge
 
-    for i in range(len(max_idx)):
-        print(f"Combination {max_idx[i]}, highlight {i}, rouge score {max_rouge[i]}")
     return max_idx, max_rouge
 
 
@@ -262,6 +260,7 @@ def format_to_bert(args):
 def tokenize(args):
     stories_dir = os.path.abspath(args.raw_path)
     tokenized_stories_dir = os.path.abspath(args.save_path)
+    os.makedirs(tokenized_stories_dir, exist_ok=True)
 
     print("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
     stories = os.listdir(stories_dir)
@@ -319,6 +318,7 @@ def _format_to_bert(params):
 
 
 def format_to_lines(args):
+    os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
     corpus_mapping = {}
     for corpus_type in ['valid', 'test', 'train']:
         temp = []
@@ -345,28 +345,24 @@ def format_to_lines(args):
             dataset.append(d)
             if (len(dataset) > args.shard_size):
                 pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
-                with open(pt_file, 'w') as save:
-                    # save.write('\n'.join(dataset))
-                    save.write(json.dumps(dataset))
-                    p_ct += 1
-                    dataset = []
+                json.dump(dataset, open(pt_file, 'w'), indent=2)
+                p_ct += 1
+                dataset = []
 
         pool.close()
         pool.join()
         if (len(dataset) > 0):
             pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
-            with open(pt_file, 'w') as save:
-                # save.write('\n'.join(dataset))
-                save.write(json.dumps(dataset))
-                p_ct += 1
-                dataset = []
+            json.dump(dataset, open(pt_file, 'w'), indent=2)
+            p_ct += 1
+            dataset = []
 
 
 def _format_to_lines(params):
     f, args = params
     print(f)
-    source, tgt = load_json(f, args.lower)
-    return {'src': source, 'tgt': tgt}
+    docId, source, tgt = load_json(f, args.lower)
+    return {'docId': docId, 'src': source, 'tgt': tgt}
 
 
 def fix_missing_period(args):
@@ -418,7 +414,7 @@ def analysis(args):
             a_lst.append((json_f, args, pjoin(args.save_path, real_name)))
         print(a_lst)
         pool = Pool(args.n_cpus)
-        for d in pool.imap(_extractive_oracle, a_lst):
+        for d in pool.imap(_analysis, a_lst):
             pass
 
         pool.close()
@@ -432,51 +428,49 @@ def _analysis(params):
         return
     os.makedirs(os.path.dirname(save_file), exist_ok=True)
 
-    bert = BertData(args)
-
     logger.info('Processing %s' % json_file)
     jobs = json.load(open(json_file))
 
-    oracle_stats = {
+    stats = {
         'document': {'#documents': 0, '#documents with overlapped highlights': 0},
         'highlight': {'rouge all': {}}}
     for i in range(11):
         r = f"rouge {i / 10:.1f}"
-        oracle_stats['highlight'][r] = {}
-        oracle_stats['highlight'][r]['#highlights'] = 0
-        oracle_stats['highlight'][r]['#single-segment highlights'] = 0
-        oracle_stats['highlight'][r]['#multi-segment highlights'] = 0
+        stats['highlight'][r] = {}
+        stats['highlight'][r]['#highlights'] = 0
+        stats['highlight'][r]['#single-segment highlights'] = 0
+        stats['highlight'][r]['#multi-segment highlights'] = 0
         for j in range(4):
-            oracle_stats['highlight'][r][f"#{j}-sentence highlights"] = 0
+            stats['highlight'][r][f"#{j}-sentence highlights"] = 0
 
+    dataset = []
     for d in jobs:
         source, tgt = d['src'], d['tgt']
-        # source = [bert.tokenizer.tokenize(' '.join(s)) for s in source]
-        # tgt = [bert.tokenizer.tokenize(' '.join(t)) for t in tgt]
-        # for s in source: print(s)
-        # print('-' * 8)
-        # for t in tgt: print(t)
-        oracle_ids, oracle_rouges = separate_selection(source, tgt, 3)
+        if args.lower:
+            source = [' '.join(s).lower().split() for s in source]
+            tgt = [' '.join(s).lower().split() for s in tgt]
+        ids, rouges = separate_selection(source, tgt, 3)
+        dataset.append({'docId': d['docId'], 'segIds': ids, 'rouge': rouges})
         overlap = False
-        for i in range(len(oracle_ids)):
-            r = f"rouge {int(oracle_rouges[i]*10)/10:.1f}"
-            n = f"#{len(oracle_ids[i])}-sentence highlights"
-            oracle_stats['highlight'][r][n] += 1
-            if oracle_ids[i]:
-                if len(oracle_ids[i]) == max(oracle_ids[i]) - min(oracle_ids[i]) + 1:
-                    oracle_stats['highlight'][r]['#single-segment highlights'] += 1
+        for i in range(len(ids)):
+            r = f"rouge {int(rouges[i]*10)/10:.1f}"
+            n = f"#{len(ids[i])}-sentence highlights"
+            stats['highlight'][r][n] += 1
+            if ids[i]:
+                if len(ids[i]) == max(ids[i]) - min(ids[i]) + 1:
+                    stats['highlight'][r]['#single-segment highlights'] += 1
                 else:
-                    oracle_stats['highlight'][r]['#multi-segment highlights'] += 1
+                    stats['highlight'][r]['#multi-segment highlights'] += 1
             if not overlap:
-                for j in range(i + 1, len(oracle_ids)):
-                    if len(set(oracle_ids[i]).intersection(oracle_ids[j])) > 0:
+                for j in range(i + 1, len(ids)):
+                    if len(set(ids[i]).intersection(ids[j])) > 0:
                         overlap = True
-            oracle_stats['highlight'][r]['#highlights'] += 1
+            stats['highlight'][r]['#highlights'] += 1
         if overlap:
-            oracle_stats['document']['#documents with overlapped highlights'] += 1
-        oracle_stats['document']['#documents'] += 1
+            stats['document']['#documents with overlapped highlights'] += 1
+        stats['document']['#documents'] += 1
 
-    highlight_stats = oracle_stats['highlight']
+    highlight_stats = stats['highlight']
     highlight_stats['rouge all']['#highlights'] = 0
     highlight_stats['rouge all']['#single-segment highlights'] = 0
     highlight_stats['rouge all']['#multi-segment highlights'] = 0
@@ -489,8 +483,9 @@ def _analysis(params):
         highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r]['#multi-segment highlights']
         for i in range(4):
             highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][f"#{i}-sentence highlights"]
+    dataset = [stats] + dataset
 
     logger.info('Saving to %s' % save_file)
-    json.dump(oracle_stats, open(save_file, "w"), indent=2)
+    json.dump(dataset, open(save_file, "w"), indent=2)
 
 
