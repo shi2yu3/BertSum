@@ -95,7 +95,7 @@ def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
                     best_match_rouge = rouge_score
             if (s == 0 and best_match_idx == -1):
                 impossible_sents.append(c[0])
-            if best_match_rouge > max_rouge[best_match_idx]:
+            if best_match_idx >= 0 and best_match_rouge > max_rouge[best_match_idx]:
                 max_idx[best_match_idx] = list(c)
                 max_rouge[best_match_idx] = best_match_rouge
 
@@ -470,7 +470,7 @@ def _analysis(params):
             stats['document']['#documents with overlapped highlights'] += 1
         stats['document']['#documents'] += 1
 
-        if (num + 1) % 10:
+        if (num + 1) % 1000 == 0:
             highlight_stats = stats['highlight']
             highlight_stats['rouge all']['#highlights'] = 0
             highlight_stats['rouge all']['#single-segment highlights'] = 0
@@ -487,7 +487,7 @@ def _analysis(params):
                 for i in range(4):
                     highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][
                         f"#{i}-sentence highlights"]
-            logger.info('Saving partial results to %s' % save_file)
+            logger.info(f'Saving {num+1} results to {save_file}')
             json.dump([stats] + dataset, open(save_file, "w"), indent=2)
 
     highlight_stats = stats['highlight']
