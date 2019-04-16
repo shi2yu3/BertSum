@@ -18,9 +18,6 @@ from others.utils import clean
 from prepro.utils import _get_word_ngrams
 
 
-# dm_single_close_quote = u'\u2019' # unicode
-# dm_double_close_quote = u'\u201d'
-# END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"] # acceptable ways to end a sentence
 END_TOKENS = ['.', '!', '?'] # acceptable ways to end a sentence
 
 def load_json(p, lower):
@@ -33,7 +30,6 @@ def load_json(p, lower):
             tokens = [t.lower() for t in tokens]
         if (tokens[0] == '@highlight'):
             flag = True
-            # continue
         if (flag):
             tgt.append(tokens)
             flag = False
@@ -68,10 +64,10 @@ def cal_rouge(evaluated_ngrams, reference_ngrams):
 
 def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
     def _rouge_clean(s):
-        return re.sub(r'[^a-zA-Z0-9 #]', '', s)
+        return re.sub(r'[^a-zA-Z0-9 ]', '', s)
 
-    max_rouge = [-1.0] * len(abstract_sent_list)
-    max_idx = [[-1]] * len(abstract_sent_list)
+    max_rouge = [0.0] * len(abstract_sent_list)
+    max_idx = [[]] * len(abstract_sent_list)
     # abstract = sum(abstract_sent_list, [])
     abstract = [_rouge_clean(' '.join(a)).split() for a in abstract_sent_list]
     sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
@@ -93,7 +89,7 @@ def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
             for i in range(len(reference_1grams)):
                 rouge_1 = cal_rouge(candidates_1, reference_1grams[i])['f']
                 rouge_2 = cal_rouge(candidates_2, reference_2grams[i])['f']
-                rouge_score = rouge_1 + rouge_2
+                rouge_score = (rouge_1 + rouge_2) / 2.0
                 if rouge_score > best_match_rouge:
                     best_match_idx = i
                     best_match_rouge = rouge_score
@@ -104,8 +100,7 @@ def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
                 max_rouge[best_match_idx] = best_match_rouge
 
     for i in range(len(max_idx)):
-        if max_idx[i] is not [-1]:
-            print(f"Combination {max_idx[i]}, highlight {i}, rouge score {max_rouge[i]}")
+        print(f"Combination {max_idx[i]}, highlight {i}, rouge score {max_rouge[i]}")
     return max_idx, max_rouge
 
 
@@ -253,7 +248,6 @@ def format_to_bert(args):
     for corpus_type in datasets:
         a_lst = []
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
-            # real_name = json_f.split('/')[-1]
             real_name = os.path.basename(json_f)
             a_lst.append((json_f, args, pjoin(args.save_path, real_name.replace('json', 'bert.pt'))))
         print(a_lst)
@@ -333,7 +327,6 @@ def format_to_lines(args):
         corpus_mapping[corpus_type] = {key.strip(): 1 for key in temp}
     train_files, valid_files, test_files = [], [], []
     for f in glob.glob(pjoin(args.raw_path, '*.json')):
-        # real_name = f.split('/')[-1].split('.')[0]
         real_name = os.path.splitext(os.path.splitext(os.path.basename(f))[0])[0]
         if (real_name in corpus_mapping['valid']):
             valid_files.append(f)
@@ -413,7 +406,7 @@ def _fix_missing_period(s, t):
         f.write("\n".join(lines))
 
 
-def extractive_oracle(args):
+def analysis(args):
     if (args.dataset != ''):
         datasets = [args.dataset]
     else:
@@ -432,55 +425,72 @@ def extractive_oracle(args):
         pool.join()
 
 
-def _extractive_oracle(params):
+def _analysis(params):
     json_file, args, save_file = params
     if (os.path.exists(save_file)):
         logger.info('Ignore %s' % save_file)
         return
+    os.makedirs(os.path.dirname(save_file), exist_ok=True)
 
     bert = BertData(args)
 
     logger.info('Processing %s' % json_file)
     jobs = json.load(open(json_file))
-    oracle_selections = [[0 for col in range(3)] for row in range(20)]
+
+    oracle_stats = {
+        'document': {'#documents': 0, '#documents with overlapped highlights': 0},
+        'highlight': {'rouge all': {}}}
+    for i in range(11):
+        r = f"rouge {i / 10:.1f}"
+        oracle_stats['highlight'][r] = {}
+        oracle_stats['highlight'][r]['#highlights'] = 0
+        oracle_stats['highlight'][r]['#single-segment highlights'] = 0
+        oracle_stats['highlight'][r]['#multi-segment highlights'] = 0
+        for j in range(4):
+            oracle_stats['highlight'][r][f"#{j}-sentence highlights"] = 0
+
     for d in jobs:
         source, tgt = d['src'], d['tgt']
-        source = [bert.tokenizer.tokenize(' '.join(s)) for s in source]
-        tgt = [bert.tokenizer.tokenize(' '.join(t)) for t in tgt]
-        for s in source: print(s)
-        print('-' * 8)
-        for t in tgt: print(t)
-        if (args.oracle_mode == 'greedy'):
-            oracle_ids = greedy_selection(source, tgt, 3)
-        elif (args.oracle_mode == 'combination'):
-            oracle_ids = combination_selection(source, tgt, 3)
-        elif (args.oracle_mode == 'separate'):
-            oracle_ids, oracle_rouges = separate_selection(source, tgt, 3)
-            for i in range(len(oracle_ids)):
-                idx1 = int(oracle_rouges[i] * 10)
-                idx2 = len(oracle_ids[i])
-                oracle_selections[idx1][idx2 - 1] += 1
-                print("%s" % "    ".join([str(i + 1) for i in range(3)]))
-                for rouge_idx in range(len(oracle_selections)):
-                    s = ""
-                    for comb_idx in range(len(oracle_selections[rouge_idx])):
-                        c = oracle_selections[rouge_idx][comb_idx]
-                        t = sum(oracle_selections[rouge_idx])
-                        if t != 0:
-                            s += "  %d(%.1f%%)" % (c, c / t * 100)
-                    print("  %.1f%s" % (rouge_idx / 10, s))
+        # source = [bert.tokenizer.tokenize(' '.join(s)) for s in source]
+        # tgt = [bert.tokenizer.tokenize(' '.join(t)) for t in tgt]
+        # for s in source: print(s)
+        # print('-' * 8)
+        # for t in tgt: print(t)
+        oracle_ids, oracle_rouges = separate_selection(source, tgt, 3)
+        overlap = False
+        for i in range(len(oracle_ids)):
+            r = f"rouge {int(oracle_rouges[i]*10)/10:.1f}"
+            n = f"#{len(oracle_ids[i])}-sentence highlights"
+            oracle_stats['highlight'][r][n] += 1
+            if oracle_ids[i]:
+                if len(oracle_ids[i]) == max(oracle_ids[i]) - min(oracle_ids[i]) + 1:
+                    oracle_stats['highlight'][r]['#single-segment highlights'] += 1
+                else:
+                    oracle_stats['highlight'][r]['#multi-segment highlights'] += 1
+            if not overlap:
+                for j in range(i + 1, len(oracle_ids)):
+                    if len(set(oracle_ids[i]).intersection(oracle_ids[j])) > 0:
+                        overlap = True
+            oracle_stats['highlight'][r]['#highlights'] += 1
+        if overlap:
+            oracle_stats['document']['#documents with overlapped highlights'] += 1
+        oracle_stats['document']['#documents'] += 1
+
+    highlight_stats = oracle_stats['highlight']
+    highlight_stats['rouge all']['#highlights'] = 0
+    highlight_stats['rouge all']['#single-segment highlights'] = 0
+    highlight_stats['rouge all']['#multi-segment highlights'] = 0
+    for i in range(4):
+        highlight_stats['rouge all'][f"#{i}-sentence highlights"] = 0
+    for i in range(11):
+        r = f"rouge {i / 10:.1f}"
+        highlight_stats['rouge all']['#highlights'] += highlight_stats[r]['#highlights']
+        highlight_stats['rouge all']['#single-segment highlights'] += highlight_stats[r]['#single-segment highlights']
+        highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r]['#multi-segment highlights']
+        for i in range(4):
+            highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][f"#{i}-sentence highlights"]
 
     logger.info('Saving to %s' % save_file)
-    # with open(save_file, "w") as f:
-    print("%s" % "    ".join([str(i + 1) for i in range(3)]))
-    for rouge_idx in oracle_selections:
-        s = ""
-        for comb_idx in oracle_selections[rouge_idx]:
-            c = oracle_selections[rouge_idx][comb_idx]
-            t = sum(oracle_selections[rouge_idx].values())
-            if t != 0:
-                s += "  %d(%.1f%%)" % (c, c / t * 100)
-        print("  %d%s", rouge_idx, s)
-        # f.write()
+    json.dump(oracle_stats, open(save_file, "w"), indent=2)
 
 
