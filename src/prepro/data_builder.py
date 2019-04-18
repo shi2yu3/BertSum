@@ -508,3 +508,47 @@ def _analysis(params):
     json.dump([stats] + dataset, open(save_file, "w"), indent=2)
 
 
+def format_to_translation(args):
+    os.makedirs(args.save_path, exist_ok=True)
+    corpus_mapping = {}
+    for corpus_type in ['valid', 'test', 'train']:
+        temp = []
+        for line in open(pjoin(args.map_path, 'mapping_' + corpus_type + '.txt')):
+            temp.append(hashhex(line.strip()))
+        corpus_mapping[corpus_type] = {key.strip(): 1 for key in temp}
+    train_files, valid_files, test_files = [], [], []
+    for f in glob.glob(pjoin(args.raw_path, '*.json')):
+        real_name = os.path.splitext(os.path.splitext(os.path.basename(f))[0])[0]
+        if (real_name in corpus_mapping['valid']):
+            valid_files.append(f)
+        elif (real_name in corpus_mapping['test']):
+            test_files.append(f)
+        elif (real_name in corpus_mapping['train']):
+            train_files.append(f)
+
+    corpora = {'train': train_files, 'valid': valid_files, 'test': test_files}
+    for corpus_type in ['train', 'valid', 'test']:
+        a_lst = [(f, args) for f in corpora[corpus_type]]
+        pool = Pool(args.n_cpus)
+        dataset = []
+        for d in pool.imap_unordered(_format_to_translation, a_lst):
+            dataset.append(d)
+        pool.close()
+        pool.join()
+
+        with open(os.path.join(args.save_path, f"{corpus_type}.src.txt"), "w") as src:
+            with open(os.path.join(args.save_path, f"{corpus_type}.tgt.txt"), "w") as tgt:
+                for i in range(len(dataset)):
+                    src.write(f"{dataset[i]['src']}\n")
+                    tgt.write(f"{dataset[i]['tgt']}\n")
+
+
+def _format_to_translation(params):
+    f, args = params
+    logger.info(f)
+    docId, source, tgt = load_json(f, args.lower)
+    source = ' '.join([' '.join(s) for s in source])
+    tgt = ' '.join([' '.join([w for w in t if w != '@highlight']) for t in tgt])
+    return {'docId': docId, 'src': source, 'tgt': tgt}
+
+
