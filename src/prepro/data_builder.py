@@ -536,8 +536,10 @@ def format_to_translation(args):
         pool.close()
         pool.join()
 
-        with open(os.path.join(args.save_path, f"{corpus_type}.src.txt"), "w") as src:
-            with open(os.path.join(args.save_path, f"{corpus_type}.tgt.txt"), "w") as tgt:
+        src_file = os.path.join(args.save_path, f"{corpus_type}.src.txt")
+        tgt_file = os.path.join(args.save_path, f"{corpus_type}.tgt.txt")
+        with open(src_file, "w", encoding='utf-8') as src:
+            with open(tgt_file, "w", encoding='utf-8') as tgt:
                 for i in range(len(dataset)):
                     src.write(f"{dataset[i]['src']}\n")
                     tgt.write(f"{dataset[i]['tgt']}\n")
