@@ -63,7 +63,7 @@ def cal_rouge(evaluated_ngrams, reference_ngrams):
     return {"f": f1_score, "p": precision, "r": recall}
 
 
-def separate_selection(doc_sent_list, abstract_sent_list, summary_size):
+def greedy_combination_selection(doc_sent_list, abstract_sent_list, summary_size):
     def _rouge_clean(s):
         return re.sub(r'[^a-zA-Z0-9 ]', '', s)
 
@@ -449,7 +449,7 @@ def _analysis(params):
         if args.lower:
             source = [' '.join(s).lower().split() for s in source]
             tgt = [' '.join(s).lower().split() for s in tgt]
-        ids, rouges = separate_selection(source, tgt, 3)
+        ids, rouges = greedy_combination_selection(source, tgt, 3)
         dataset.append({'docId': d['docId'], 'segIds': ids, 'rouge': rouges})
         overlap = False
         for i in range(len(ids)):
