@@ -549,9 +549,9 @@ def _format_to_translation(params):
     f, args = params
     logger.info(f)
     docId, source, tgt = load_json(f, args.lower)
-    source = ' '.join([' '.join(s) for s in source])
-    source = source[:args.max_src_ntokens]
-    tgt = ' '.join([' '.join([w for w in t if w != '@highlight']) for t in tgt])
+    source = ' '.join([' '.join(sent) for sent in source])
+    source = ' '.join(source.split()[:args.max_src_ntokens])
+    tgt = ' '.join([' '.join([wrd for wrd in sent if wrd != '@highlight']) for sent in tgt])
     return {'docId': docId, 'src': source, 'tgt': tgt}
 
 
