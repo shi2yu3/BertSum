@@ -18,7 +18,9 @@ from others.utils import clean
 from prepro.utils import _get_word_ngrams
 
 
-END_TOKENS = ['.', '!', '?'] # acceptable ways to end a sentence
+dm_single_close_quote = u'\u2019' # unicode
+dm_double_close_quote = u'\u201d'
+END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"] # acceptable ways to end a sentence
 
 def load_json(p, lower):
     source = []
@@ -30,6 +32,7 @@ def load_json(p, lower):
         if (lower):
             tokens = [t.lower() for t in tokens]
         if (tokens[0] == '@highlight'):
+            tokens.pop(0)
             flag = True
         if (flag):
             tgt.append(tokens)
@@ -239,6 +242,7 @@ class BertData():
 
 
 def format_to_bert(args):
+    os.makedirs(args.save_path, exist_ok=True)
     if (args.dataset != ''):
         datasets = [args.dataset]
     else:
@@ -355,7 +359,6 @@ def format_to_lines(args):
             pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
             json.dump(dataset, open(pt_file, 'w'), indent=2)
             p_ct += 1
-            dataset = []
 
 
 def _format_to_lines(params):
@@ -389,14 +392,36 @@ def fix_missing_period(args):
 
 def _fix_missing_period(s, t):
     """Adds a period to a line that is missing a period"""
+    def fix_period(line):
+        if line and "@highlight" not in line.lower():
+            idx = -1
+            while True:
+                if line[idx].isalnum():
+                    line += " ."
+                    break
+                if line[idx] == "." or line[idx] == "!" or line[idx] == "?":
+                    break
+                idx -= 1
+                if idx < -len(line):
+                    break
+        return line
+
     logger.info(s)
     lines = []
     with open(s, "r", encoding='utf-8') as f:
+        acc_line = ""
         for line in f:
             line = line.strip()
-            if line and "@highlight" not in line.lower() and line[-1] not in END_TOKENS:
-                line += " ."
-            lines.append(line)
+            if line == "" or line.lower() == "@highlight":
+                acc_line = fix_period(acc_line)
+                if acc_line.strip():
+                    lines.append(acc_line.strip() + "\n")
+                acc_line = line
+            else:
+                acc_line += " " + line
+        acc_line = fix_period(acc_line)
+        if acc_line.strip():
+            lines.append(acc_line.strip())
 
     with open(t, "w", encoding='utf-8') as f:
         f.write("\n".join(lines))
