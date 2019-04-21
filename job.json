@@ -1,0 +1,26 @@
+{
+  "version": "2019_04_03",
+  "metadata": {
+    "name": "bertsum",
+    "cluster": "eu2",
+    "vc": "ipgsrch",
+    "username": "yushi"
+  },
+  "environmentVariables": {
+    "rootdir": "/philly/eu2/ipgsrch/yushi/bertsum"
+  },
+  "resources": {
+    "workers": {
+      "type": "skuResource",
+      "sku": "G1",
+      "count": 1,
+      "image": "phillyregistry.azurecr.io/philly/jobs/custom/pytorch:pytorch1.0.0-py36-vcr",
+      "commandLine0": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode train -encoder classifier -dropout 0.1 -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -lr 2e-3 -visible_gpus 0 -gpu_ranks 0 -world_size 1 -report_every 50 -save_checkpoint_steps 1000 -batch_size 3000 -decay_method noam -train_steps 50000 -accum_count 2 -log_file $PHILLY_JOB_DIRECTORY/train.log -use_interval true -warmup_steps 10000",
+      "commandLine1": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode train -encoder transformer -dropout 0.1 -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -lr 2e-3 -visible_gpus 0 -gpu_ranks 0 -world_size 1 -report_every 50 -save_checkpoint_steps 1000 -batch_size 3000 -decay_method noam -train_steps 50000 -accum_count 2 -log_file $PHILLY_JOB_DIRECTORY/train.log -use_interval true -warmup_steps 10000 -ff_size 2048 -inter_layers 2 -heads 8",
+      "commandLine": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode train -encoder rnn -dropout 0.1 -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -lr 2e-3 -visible_gpus 0  -gpu_ranks 0 -world_size 1 -report_every 50 -save_checkpoint_steps 1000 -batch_size 3000 -decay_method noam -train_steps 50000 -accum_count 2 -log_file $PHILLY_JOB_DIRECTORY/train.log -use_interval true -warmup_steps 10000 -rnn_size 768",
+      "commandLine00": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode validate -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY/../1555486458178_5127 -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -visible_gpus 0 -gpu_ranks 0 -batch_size 30000 -log_file $PHILLY_JOB_DIRECTORY/validate.log -result_path $PHILLY_JOB_DIRECTORY -test_all -block_trigram true",
+      "commandLine10": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode validate -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY/../1555486458178_5623 -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -visible_gpus 0 -gpu_ranks 0 -batch_size 30000 -log_file $PHILLY_JOB_DIRECTORY/validate.log -result_path $PHILLY_JOB_DIRECTORY -test_all -block_trigram true",
+      "commandLine20": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode validate -bert_data_path $rootdir/bert_data/cnndm -model_path $PHILLY_JOB_DIRECTORY/../1555486458178_5360 -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $PHILLY_JOB_DIRECTORY -visible_gpus 0 -gpu_ranks 0 -batch_size 30000 -log_file $PHILLY_JOB_DIRECTORY/validate.log -result_path $PHILLY_JOB_DIRECTORY -test_all -block_trigram true"
+    }
+  }
+}
