@@ -45,7 +45,7 @@ def build_trainer(args, device_id, model,
 
     print('gpu_rank %d' % gpu_rank)
 
-    tensorboard_log_dir = args.model_path
+    tensorboard_log_dir = args.tensorboard_log_dir
 
     writer = SummaryWriter(tensorboard_log_dir, comment="Unmt")
 
@@ -233,8 +233,8 @@ class Trainer(object):
 
         can_path = '%s_step%d.candidate'%(self.args.result_path,step)
         gold_path = '%s_step%d.gold' % (self.args.result_path, step)
-        with open(can_path, 'w') as save_pred:
-            with open(gold_path, 'w') as save_gold:
+        with open(can_path, 'w', encoding='utf-8') as save_pred:
+            with open(gold_path, 'w', encoding='utf-8') as save_gold:
                 with torch.no_grad():
                     for batch in test_iter:
                         src = batch.src
