@@ -71,7 +71,7 @@ ROUGE-F(1/2/3/L): 51.37/30.35/47.65
 ROUGE-R(1/2/3/l): 52.24/30.71/48.43
 ```
 
-#### Experimental results
+### Experimental results
 
 To get ROUGE score of each experiment, run the following commands after the ```validate``` job finishs, whose Philly id is set to ```id```.
 ```
