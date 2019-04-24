@@ -15,10 +15,6 @@ Results on CNN/Dailymail (25/3/2019):
 **Python version**: This code is in Python3.6
 
 **Package Requirements**: pytorch pytorch_pretrained_bert tensorboardX multiprocess pyrouge
-```
-nvidia-docker run --rm -it -v $(pwd):/workspace --ipc=host pytorch/pytorch:nightly-devel-cuda9.2-cudnn7
-pip install pytorch_pretrained_bert tensorboardX multiprocess pyrouge
-```
 
 Some codes are borrowed from ONMT(https://github.com/OpenNMT/OpenNMT-py)
 
@@ -26,12 +22,6 @@ Some codes are borrowed from ONMT(https://github.com/OpenNMT/OpenNMT-py)
 ### Option 1: download the processed data
 
 download https://drive.google.com/open?id=1-NJKRoNzk2ugjjB2mfnmpR15KYB_Fr0s
-```
-curl -c /tmp/cookies "https://drive.google.com/uc?id=1-NJKRoNzk2ugjjB2mfnmpR15KYB_Fr0s&export=download" > /tmp/intermezzo.html
-curl -L -b /tmp/cookies "https://drive.google.com$(cat /tmp/intermezzo.html | grep -Po 'uc-download-link" [^>]* href="\K[^"]*' | sed 's/\&amp;/\&/g')" > bertsum_data.zip
-unzip bertsum_data.zip
-rm bertsum_data.zip
-```
 
 unzip the zipfile and put all `.pt` files into `bert_data`
 
