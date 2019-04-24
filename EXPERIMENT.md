@@ -114,6 +114,6 @@ python $rootdir/src/train.py -mode validate -bert_data_path $rootdir/bert_data_r
 ```
 | train | validate | model | ROUGE-F(1/2/3/L) | ROUGE-R(1/2/3/l) |
 | --- | --- | --- | --- | --- |
-| [1555486458178_8590](https://philly/#/job/eu2/ipgsrch/1555486458178_8590) | [1555486458178_8522xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8522) | classifier | 42.82/20.03/39.28 | 52.67/24.61/48.27 |
-| [1555486458178_8591](https://philly/#/job/eu2/ipgsrch/1555486458178_8591) | [1555486458178_8523xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8523) | transformer | 42.85/20.09/39.32 | 52.69/24.66/48.28 |
-| [1555486458178_8592](https://philly/#/job/eu2/ipgsrch/1555486458178_8592) | [1555486458178_8524xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8524) | rnn | ? | --- |
+| [1555486458178_8590](https://philly/#/job/eu2/ipgsrch/1555486458178_8590) | [xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8522) | classifier | xxx | xxx |
+| [1555486458178_8591](https://philly/#/job/eu2/ipgsrch/1555486458178_8591) | [xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8523) | transformer | xxx | xxx |
+| [1555486458178_8592](https://philly/#/job/eu2/ipgsrch/1555486458178_8592) | [xxx](https://philly/#/job/eu2/ipgsrch/1555486458178_8524) | rnn | xxx | xxx |
