@@ -36,6 +36,7 @@ mv results/cnndm_step0.candidate results/candidate
 mv results/cnndm_step0.gold results/gold
 pyrouge_set_rouge_path pyrouge/tools/ROUGE-1.5.5
 python src/rouge.py
+exit
 ```
 ```
 ROUGE-F(1/2/3/L): 40.06/17.36/36.38
@@ -80,6 +81,7 @@ sudo bash philly-fs.bash -ls //philly/eu2/ipgsrch/sys/jobs/application_$id | gre
 docker run --rm -it -v $(pwd):/workspace bertsum
 pyrouge_set_rouge_path pyrouge/tools/ROUGE-1.5.5
 python src/rouge.py
+exit
 ```
 
 ##### Author's data
