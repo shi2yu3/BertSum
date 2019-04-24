@@ -188,7 +188,7 @@ def hashhex(s):
 class BertData():
     def __init__(self, args):
         self.args = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+        self.tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=True)
         self.sep_vid = self.tokenizer.vocab['[SEP]']
         self.cls_vid = self.tokenizer.vocab['[CLS]']
         self.pad_vid = self.tokenizer.vocab['[PAD]']
@@ -533,7 +533,7 @@ def _analysis(params):
     json.dump([stats] + dataset, open(save_file, "w"), indent=2)
 
 
-def format_to_translation(args):
+def format_to_fairseq(args):
     os.makedirs(args.save_path, exist_ok=True)
     corpus_mapping = {}
     for corpus_type in ['valid', 'test', 'train']:
@@ -556,7 +556,7 @@ def format_to_translation(args):
         a_lst = [(f, args) for f in corpora[corpus_type]]
         pool = Pool(args.n_cpus)
         dataset = []
-        for d in pool.imap_unordered(_format_to_translation, a_lst):
+        for d in pool.imap_unordered(_format_to_fairseq, a_lst):
             dataset.append(d)
         pool.close()
         pool.join()
@@ -570,7 +570,7 @@ def format_to_translation(args):
                     tgt.write(f"{dataset[i]['tgt']}\n")
 
 
-def _format_to_translation(params):
+def _format_to_fairseq(params):
     f, args = params
     logger.info(f)
     docId, source, tgt = load_json(f, args.lower)
