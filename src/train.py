@@ -122,6 +122,8 @@ def wait_and_validate(args, device_id):
     timestep = 0
     if (args.test_all):
         cp_files = sorted(glob.glob(os.path.join(args.model_path, 'model_step_*.pt')))
+        if not cp_files:
+            logger.info(f"No model found in {args.model_path}")
         cp_files.sort(key=os.path.getmtime)
         xent_lst = []
         for i, cp in enumerate(cp_files):
@@ -279,11 +281,13 @@ if __name__ == '__main__':
 
 
     parser.add_argument("-encoder", default='classifier', type=str, choices=['classifier','transformer','rnn','baseline'])
-    parser.add_argument("-mode", default='train', type=str, choices=['train','validate','test'])
+    parser.add_argument("-mode", default='train', type=str, choices=['train','validate','test','lead','oracle'])
     parser.add_argument("-bert_data_path", default='../data/bert_data/cnndm')
     parser.add_argument("-model_path", default='../models/')
     parser.add_argument("-result_path", default='../results/cnndm')
     parser.add_argument("-temp_dir", default='../temp')
+    parser.add_argument("-tensorboard_log_dir", default='../tensorboard')
+    parser.add_argument("-bert_model", default='bert_uncased_base')
     parser.add_argument("-bert_config_path", default='../bert_config_uncased_base.json')
 
     parser.add_argument("-batch_size", default=1000, type=int)
