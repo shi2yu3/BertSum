@@ -1,3 +1,23 @@
+# Install pyrouge
+```
+git clone https://github.com/andersjo/pyrouge
+cd pyrouge/tools/ROUGE-1.5.5/data
+rm WordNet-2.0.exc.db
+./WordNet-2.0-Exceptions/buildExeptionDB.pl ./WordNet-2.0-Exceptions ./smart_common_words.txt ./WordNet-2.0.exc.db
+cd ../../../..
+```
+
+**Option 1**: only install pyrouge
+```
+apt-get update && apt-get install -y perl synaptic
+pip install pyrouge
+```
+
+**Option 2**: build docker image
+```
+docker build -t bertsum .
+```
+
 # Some baseline numbers
 
 #### ROUGE of original news articles
