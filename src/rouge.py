@@ -19,6 +19,8 @@ for i in ["", "1", "2", "3"]:
             n += 1
         print(f'Rouges of results/candidate{i}: \n{rouge_results_to_str(rouges[i])}')
 
+print('-' * 10 + ' Summary ' + '*' * 10)
+
 for key in rouges:
     print(f'Rouges of results/candidate{key}: \n{rouge_results_to_str(rouges[key])}')
 
