@@ -1,4 +1,6 @@
 # Install pyrouge
+
+Download pyrouge and regenerate WordNet-2.0.exc.db
 ```
 git clone https://github.com/andersjo/pyrouge
 cd pyrouge/tools/ROUGE-1.5.5/data
