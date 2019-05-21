@@ -135,6 +135,28 @@ def greedy_selection(doc_sent_list, abstract_sent_list, summary_size):
     return sorted(selected)
 
 
+def sentence_rouge(doc_sent_list, abstract_sent_list):
+    def _rouge_clean(s):
+        return re.sub(r'[^a-zA-Z0-9 ]', '', s)
+
+    abstract = sum(abstract_sent_list, [])
+    abstract = _rouge_clean(' '.join(abstract)).split()
+    sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
+    evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
+    reference_1grams = _get_word_ngrams(1, [abstract])
+    evaluated_2grams = [_get_word_ngrams(2, [sent]) for sent in sents]
+    reference_2grams = _get_word_ngrams(2, [abstract])
+
+    sent_scores = []
+    for i in range(len(sents)):
+        candidates_1 = set.union(*map(set, [evaluated_1grams[i]]))
+        candidates_2 = set.union(*map(set, [evaluated_2grams[i]]))
+        rouge_1 = cal_rouge(candidates_1, reference_1grams)
+        rouge_2 = cal_rouge(candidates_2, reference_2grams)
+        sent_scores.append({'rouge_1': rouge_1, 'rouge_2': rouge_2})
+    return sent_scores
+
+
 def hashhex(s):
     """Returns a heximal formated SHA1 hash of the input string."""
     h = hashlib.sha1()
@@ -196,6 +218,45 @@ class BertData():
         tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
         return src_subtoken_idxs, labels, segments_ids, cls_ids, src_txt, tgt_txt
+
+    def preprocess_raw_score(self, src, tgt, scores):
+        if (len(src) == 0):
+            return None
+
+        original_src_txt = [' '.join(s) for s in src]
+
+        idxs = [i for i, s in enumerate(src) if (len(s) > self.args.min_src_ntokens)]
+
+        src = [src[i][:self.args.max_src_ntokens] for i in idxs]
+        scores = [scores[i] for i in idxs]
+        src = src[:self.args.max_nsents]
+        scores = scores[:self.args.max_nsents]
+
+        assert len(src) == len(scores)
+        if (len(src) < self.args.min_nsents):
+            return None
+
+        src_txt = [' '.join(sent) for sent in src]
+        text = ' [SEP] [CLS] '.join(src_txt)
+        src_subtokens = self.tokenizer.tokenize(text)
+        src_subtokens = src_subtokens[:510]
+        src_subtokens = ['[CLS]'] + src_subtokens + ['[SEP]']
+
+        src_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(src_subtokens)
+        _segs = [-1] + [i for i, t in enumerate(src_subtoken_idxs) if t == self.sep_vid]
+        segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
+        segments_ids = []
+        for i, s in enumerate(segs):
+            if (i % 2 == 0):
+                segments_ids += s * [0]
+            else:
+                segments_ids += s * [1]
+        cls_ids = [i for i, t in enumerate(src_subtoken_idxs) if t == self.cls_vid]
+        scores = scores[:len(cls_ids)]
+
+        tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
+        src_txt = [original_src_txt[i] for i in idxs]
+        return src_subtoken_idxs, scores, segments_ids, cls_ids, src_txt, tgt_txt
 
 
 def format_to_bert(args):
@@ -429,5 +490,51 @@ def _format_to_fairseq(params):
     source = ' '.join(source.split()[:args.max_src_ntokens])
     tgt = ' '.join([' '.join([wrd for wrd in sent if wrd != '@highlight']) for sent in tgt])
     return {'docId': docId, 'src': source, 'tgt': tgt}
+
+
+def format_to_bert_w_scores(args):
+    os.makedirs(args.save_path, exist_ok=True)
+    if (args.dataset != ''):
+        datasets = [args.dataset]
+    else:
+        datasets = ['train', 'valid', 'test']
+    for corpus_type in datasets:
+        a_lst = []
+        for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
+            real_name = os.path.basename(json_f)
+            a_lst.append((json_f, args, pjoin(args.save_path, real_name.replace('json', 'sent_score.pt'))))
+        logger.info(a_lst)
+        pool = Pool(args.n_cpus)
+        for d in pool.imap(_format_to_bert_w_scores, a_lst):
+            pass
+
+        pool.close()
+        pool.join()
+
+
+def _format_to_bert_w_scores(params):
+    json_file, args, save_file = params
+    if (os.path.exists(save_file)):
+        logger.info('Ignore %s' % save_file)
+        return
+
+    bert = BertData(args)
+
+    logger.info('Processing %s' % json_file)
+    jobs = json.load(open(json_file))
+    datasets = []
+    for d in jobs:
+        source, tgt = d['src'], d['tgt']
+        sent_scores = sentence_rouge(source, tgt)
+        b_data = bert.preprocess_raw_score(source, tgt, sent_scores)
+        if (b_data is None):
+            continue
+        indexed_tokens, scores, segments_ids, cls_ids, src_txt, tgt_txt = b_data
+        b_data_dict = {"src": indexed_tokens, "scores": scores, "segs": segments_ids, 'clss': cls_ids,
+                       'src_txt': src_txt, "tgt_txt": tgt_txt}
+        datasets.append(b_data_dict)
+    logger.info('Saving to %s' % save_file)
+    torch.save(datasets, save_file)
+    gc.collect()
 
 

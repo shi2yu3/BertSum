@@ -63,6 +63,9 @@ python src/preprocess.py -mode format_to_bert -raw_path raw_data/json_data -save
 # bert-large-uncased
 python src/preprocess.py -mode format_to_bert -raw_path raw_data/json_data -save_path bert_data/bert_large_uncased -oracle_mode greedy -n_cpus 4 -bert_model bert-large-uncased
 
+# sentence scores instead of labels, bert-large-uncased
+python src/preprocess.py -mode format_to_bert_w_scores -raw_path raw_data/json_data -save_path bert_data/bert_large_uncased_w_scores -n_cpus 4 -bert_model bert-large-uncased
+
 # fairseq data format
 python src/preprocess.py -mode format_to_fairseq -raw_path raw_data/tokens -save_path fairseq_data/trunc400 -map_path urls -n_cpus 4 -max_src_ntokens 400
 python src/preprocess.py -mode format_to_fairseq -raw_path raw_data/tokens -save_path fairseq_data/no_trunc -map_path urls -n_cpus 4 -max_src_ntokens -1
