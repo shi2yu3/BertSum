@@ -8,7 +8,8 @@
   },
   "environmentVariables": {
     "rootdir": "/philly/eu2/ipgsrch/yushi/bertsum",
-    "modelpath": "/var/storage/shared/ipgsrch/sys/jobs/application_"
+    "modelpath": "/var/storage/shared/ipgsrch/sys/jobs/application",
+    "bertdata": "bert_base_uncased"
   },
   "resources": {
     "workers": {
@@ -16,7 +17,7 @@
       "sku": "G1",
       "count": 1,
       "image": "phillyregistry.azurecr.io/philly/jobs/custom/pytorch:pytorch1.0.0-py36-vcr",
-      "commandLine": "pip install --user pytorch_pretrained_bert tensorboardx multiprocess pyrouge && python $rootdir/src/train.py -mode test -bert_data_path $rootdir/bert_data/cnndm -model_path ${modelpath}1555486458178_7368/models -test_from ${modelpath}1555486458178_7368/models/model_step_50000.pt -tensorboard_log_dir $PHILLY_MODEL_DIRECTORY -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $rootdir/bert_config_uncased_base.json -visible_gpus 0 -gpu_ranks 0 -batch_size 30000 -log_file $PHILLY_JOB_DIRECTORY/test.log -result_path $PHILLY_JOB_DIRECTORY/cnndm -block_trigram true -report_rouge false"
+      "commandLine": "pip install --user pytorch_pretrained_bert tensorboardX multiprocess pyrouge  &&  python $rootdir/src/train.py -mode validate -bert_data_path $rootdir/bert_data/$bertdata/cnndm -model_path ${modelpath}_1555486458178_8592/models -tensorboard_log_dir $PHILLY_MODEL_DIRECTORY -temp_dir $PHILLY_JOB_DIRECTORY -bert_config_path $rootdir/bert_config_uncased_base.json -visible_gpus 0 -gpu_ranks 0 -batch_size 30000 -log_file $PHILLY_JOB_DIRECTORY/validate.log -result_path $PHILLY_JOB_DIRECTORY/cnndm -test_all -block_trigram true -report_rouge false"
     }
   }
 }

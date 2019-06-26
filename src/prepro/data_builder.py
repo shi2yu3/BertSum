@@ -18,10 +18,6 @@ from others.utils import clean
 from prepro.utils import _get_word_ngrams
 
 
-dm_single_close_quote = u'\u2019' # unicode
-dm_double_close_quote = u'\u201d'
-END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"] # acceptable ways to end a sentence
-
 def load_json(p, lower):
     source = []
     tgt = []
@@ -64,45 +60,6 @@ def cal_rouge(evaluated_ngrams, reference_ngrams):
 
     f1_score = 2.0 * ((precision * recall) / (precision + recall + 1e-8))
     return {"f": f1_score, "p": precision, "r": recall}
-
-
-def greedy_combination_selection(doc_sent_list, abstract_sent_list, summary_size):
-    def _rouge_clean(s):
-        return re.sub(r'[^a-zA-Z0-9 ]', '', s)
-
-    max_rouge = [0.0] * len(abstract_sent_list)
-    max_idx = [[]] * len(abstract_sent_list)
-    abstract = [_rouge_clean(' '.join(a)).split() for a in abstract_sent_list]
-    sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
-    evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
-    reference_1grams = [_get_word_ngrams(1, [a]) for a in abstract]
-    evaluated_2grams = [_get_word_ngrams(2, [sent]) for sent in sents]
-    reference_2grams = [_get_word_ngrams(2, [a]) for a in abstract]
-
-    impossible_sents = []
-    for s in range(summary_size):
-        combinations = itertools.combinations([i for i in range(len(sents)) if i not in impossible_sents], s + 1)
-        for c in combinations:
-            candidates_1 = [evaluated_1grams[idx] for idx in c]
-            candidates_1 = set.union(*map(set, candidates_1))
-            candidates_2 = [evaluated_2grams[idx] for idx in c]
-            candidates_2 = set.union(*map(set, candidates_2))
-            best_match_idx = -1
-            best_match_rouge = 0.0
-            for i in range(len(reference_1grams)):
-                rouge_1 = cal_rouge(candidates_1, reference_1grams[i])['f']
-                rouge_2 = cal_rouge(candidates_2, reference_2grams[i])['f']
-                rouge_score = (rouge_1 + rouge_2) / 2.0
-                if rouge_score > best_match_rouge:
-                    best_match_idx = i
-                    best_match_rouge = rouge_score
-            if (s == 0 and best_match_idx == -1):
-                impossible_sents.append(c[0])
-            if best_match_idx >= 0 and best_match_rouge > max_rouge[best_match_idx]:
-                max_idx[best_match_idx] = list(c)
-                max_rouge[best_match_idx] = best_match_rouge
-
-    return max_idx, max_rouge
 
 
 def combination_selection(doc_sent_list, abstract_sent_list, summary_size):
@@ -178,6 +135,28 @@ def greedy_selection(doc_sent_list, abstract_sent_list, summary_size):
     return sorted(selected)
 
 
+def sentence_rouge(doc_sent_list, abstract_sent_list):
+    def _rouge_clean(s):
+        return re.sub(r'[^a-zA-Z0-9 ]', '', s)
+
+    abstract = sum(abstract_sent_list, [])
+    abstract = _rouge_clean(' '.join(abstract)).split()
+    sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
+    evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
+    reference_1grams = _get_word_ngrams(1, [abstract])
+    evaluated_2grams = [_get_word_ngrams(2, [sent]) for sent in sents]
+    reference_2grams = _get_word_ngrams(2, [abstract])
+
+    sent_scores = []
+    for i in range(len(sents)):
+        candidates_1 = set.union(*map(set, [evaluated_1grams[i]]))
+        candidates_2 = set.union(*map(set, [evaluated_2grams[i]]))
+        rouge_1 = cal_rouge(candidates_1, reference_1grams)
+        rouge_2 = cal_rouge(candidates_2, reference_2grams)
+        sent_scores.append({'rouge_1': rouge_1, 'rouge_2': rouge_2})
+    return sent_scores
+
+
 def hashhex(s):
     """Returns a heximal formated SHA1 hash of the input string."""
     h = hashlib.sha1()
@@ -239,6 +218,45 @@ class BertData():
         tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
         return src_subtoken_idxs, labels, segments_ids, cls_ids, src_txt, tgt_txt
+
+    def preprocess_raw_score(self, src, tgt, scores):
+        if (len(src) == 0):
+            return None
+
+        original_src_txt = [' '.join(s) for s in src]
+
+        idxs = [i for i, s in enumerate(src) if (len(s) > self.args.min_src_ntokens)]
+
+        src = [src[i][:self.args.max_src_ntokens] for i in idxs]
+        scores = [scores[i] for i in idxs]
+        src = src[:self.args.max_nsents]
+        scores = scores[:self.args.max_nsents]
+
+        assert len(src) == len(scores)
+        if (len(src) < self.args.min_nsents):
+            return None
+
+        src_txt = [' '.join(sent) for sent in src]
+        text = ' [SEP] [CLS] '.join(src_txt)
+        src_subtokens = self.tokenizer.tokenize(text)
+        src_subtokens = src_subtokens[:510]
+        src_subtokens = ['[CLS]'] + src_subtokens + ['[SEP]']
+
+        src_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(src_subtokens)
+        _segs = [-1] + [i for i, t in enumerate(src_subtoken_idxs) if t == self.sep_vid]
+        segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
+        segments_ids = []
+        for i, s in enumerate(segs):
+            if (i % 2 == 0):
+                segments_ids += s * [0]
+            else:
+                segments_ids += s * [1]
+        cls_ids = [i for i, t in enumerate(src_subtoken_idxs) if t == self.cls_vid]
+        scores = scores[:len(cls_ids)]
+
+        tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
+        src_txt = [original_src_txt[i] for i in idxs]
+        return src_subtoken_idxs, scores, segments_ids, cls_ids, src_txt, tgt_txt
 
 
 def format_to_bert(args):
@@ -427,112 +445,6 @@ def _fix_missing_period(s, t):
         f.write("\n".join(lines))
 
 
-def analysis(args):
-    if (args.dataset != ''):
-        datasets = [args.dataset]
-    else:
-        datasets = ['train', 'valid', 'test']
-    for corpus_type in datasets:
-        a_lst = []
-        for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
-            real_name = os.path.basename(json_f)
-            a_lst.append((json_f, args, pjoin(args.save_path, real_name)))
-        logger.info(a_lst)
-        pool = Pool(args.n_cpus)
-        for d in pool.imap(_analysis, a_lst):
-            pass
-
-        pool.close()
-        pool.join()
-
-
-def _analysis(params):
-    json_file, args, save_file = params
-    if (os.path.exists(save_file)):
-        logger.info('Ignore %s' % save_file)
-        return
-    os.makedirs(os.path.dirname(save_file), exist_ok=True)
-
-    logger.info('Processing %s' % json_file)
-    jobs = json.load(open(json_file))
-
-    stats = {
-        'document': {'#documents': 0, '#documents with overlapped highlights': 0},
-        'highlight': {'rouge all': {}}}
-    for i in range(11):
-        r = f"rouge {i / 10:.1f}"
-        stats['highlight'][r] = {}
-        stats['highlight'][r]['#highlights'] = 0
-        stats['highlight'][r]['#single-segment highlights'] = 0
-        stats['highlight'][r]['#multi-segment highlights'] = 0
-        for j in range(4):
-            stats['highlight'][r][f"#{j}-sentence highlights"] = 0
-
-    dataset = []
-    for num, d in enumerate(jobs):
-        source, tgt = d['src'], d['tgt']
-        if args.lower:
-            source = [' '.join(s).lower().split() for s in source]
-            tgt = [' '.join(s).lower().split() for s in tgt]
-        ids, rouges = greedy_combination_selection(source, tgt, 3)
-        dataset.append({'docId': d['docId'], 'segIds': ids, 'rouge': rouges})
-        overlap = False
-        for i in range(len(ids)):
-            r = f"rouge {int(rouges[i]*10)/10:.1f}"
-            n = f"#{len(ids[i])}-sentence highlights"
-            stats['highlight'][r][n] += 1
-            if ids[i]:
-                if len(ids[i]) == max(ids[i]) - min(ids[i]) + 1:
-                    stats['highlight'][r]['#single-segment highlights'] += 1
-                else:
-                    stats['highlight'][r]['#multi-segment highlights'] += 1
-            if not overlap:
-                for j in range(i + 1, len(ids)):
-                    if len(set(ids[i]).intersection(ids[j])) > 0:
-                        overlap = True
-            stats['highlight'][r]['#highlights'] += 1
-        if overlap:
-            stats['document']['#documents with overlapped highlights'] += 1
-        stats['document']['#documents'] += 1
-
-        if (num + 1) % 1000 == 0:
-            highlight_stats = stats['highlight']
-            highlight_stats['rouge all']['#highlights'] = 0
-            highlight_stats['rouge all']['#single-segment highlights'] = 0
-            highlight_stats['rouge all']['#multi-segment highlights'] = 0
-            for i in range(4):
-                highlight_stats['rouge all'][f"#{i}-sentence highlights"] = 0
-            for i in range(11):
-                r = f"rouge {i / 10:.1f}"
-                highlight_stats['rouge all']['#highlights'] += highlight_stats[r]['#highlights']
-                highlight_stats['rouge all']['#single-segment highlights'] += highlight_stats[r][
-                    '#single-segment highlights']
-                highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r][
-                    '#multi-segment highlights']
-                for i in range(4):
-                    highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][
-                        f"#{i}-sentence highlights"]
-            logger.info(f'Saving {num+1} results to {save_file}')
-            json.dump([stats] + dataset, open(save_file, "w"), indent=2)
-
-    highlight_stats = stats['highlight']
-    highlight_stats['rouge all']['#highlights'] = 0
-    highlight_stats['rouge all']['#single-segment highlights'] = 0
-    highlight_stats['rouge all']['#multi-segment highlights'] = 0
-    for i in range(4):
-        highlight_stats['rouge all'][f"#{i}-sentence highlights"] = 0
-    for i in range(11):
-        r = f"rouge {i / 10:.1f}"
-        highlight_stats['rouge all']['#highlights'] += highlight_stats[r]['#highlights']
-        highlight_stats['rouge all']['#single-segment highlights'] += highlight_stats[r]['#single-segment highlights']
-        highlight_stats['rouge all']['#multi-segment highlights'] += highlight_stats[r]['#multi-segment highlights']
-        for i in range(4):
-            highlight_stats['rouge all'][f"#{i}-sentence highlights"] += highlight_stats[r][f"#{i}-sentence highlights"]
-
-    logger.info('Saving to %s' % save_file)
-    json.dump([stats] + dataset, open(save_file, "w"), indent=2)
-
-
 def format_to_fairseq(args):
     os.makedirs(args.save_path, exist_ok=True)
     corpus_mapping = {}
@@ -578,5 +490,51 @@ def _format_to_fairseq(params):
     source = ' '.join(source.split()[:args.max_src_ntokens])
     tgt = ' '.join([' '.join([wrd for wrd in sent if wrd != '@highlight']) for sent in tgt])
     return {'docId': docId, 'src': source, 'tgt': tgt}
+
+
+def format_to_bert_w_scores(args):
+    os.makedirs(args.save_path, exist_ok=True)
+    if (args.dataset != ''):
+        datasets = [args.dataset]
+    else:
+        datasets = ['train', 'valid', 'test']
+    for corpus_type in datasets:
+        a_lst = []
+        for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
+            real_name = os.path.basename(json_f)
+            a_lst.append((json_f, args, pjoin(args.save_path, real_name.replace('json', 'sent_score.pt'))))
+        logger.info(a_lst)
+        pool = Pool(args.n_cpus)
+        for d in pool.imap(_format_to_bert_w_scores, a_lst):
+            pass
+
+        pool.close()
+        pool.join()
+
+
+def _format_to_bert_w_scores(params):
+    json_file, args, save_file = params
+    if (os.path.exists(save_file)):
+        logger.info('Ignore %s' % save_file)
+        return
+
+    bert = BertData(args)
+
+    logger.info('Processing %s' % json_file)
+    jobs = json.load(open(json_file))
+    datasets = []
+    for d in jobs:
+        source, tgt = d['src'], d['tgt']
+        sent_scores = sentence_rouge(source, tgt)
+        b_data = bert.preprocess_raw_score(source, tgt, sent_scores)
+        if (b_data is None):
+            continue
+        indexed_tokens, scores, segments_ids, cls_ids, src_txt, tgt_txt = b_data
+        b_data_dict = {"src": indexed_tokens, "scores": scores, "segs": segments_ids, 'clss': cls_ids,
+                       'src_txt': src_txt, "tgt_txt": tgt_txt}
+        datasets.append(b_data_dict)
+    logger.info('Saving to %s' % save_file)
+    torch.save(datasets, save_file)
+    gc.collect()
 
 

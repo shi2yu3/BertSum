@@ -8,9 +8,9 @@ from others.logging import init_logger
 from prepro import data_builder
 
 
-def do_format_to_lines(args):
+def do_fix_missing_period(args):
     print(time.clock())
-    data_builder.format_to_lines(args)
+    data_builder.fix_missing_period(args)
     print(time.clock())
 
 def do_tokenize(args):
@@ -18,9 +18,24 @@ def do_tokenize(args):
     data_builder.tokenize(args)
     print(time.clock())
 
+def do_format_to_lines(args):
+    print(time.clock())
+    data_builder.format_to_lines(args)
+    print(time.clock())
+
 def do_format_to_bert(args):
     print(time.clock())
     data_builder.format_to_bert(args)
+    print(time.clock())
+
+def do_format_to_fairseq(args):
+    print(time.clock())
+    data_builder.format_to_firseq(args)
+    print(time.clock())
+
+def do_format_to_bert_w_scores(args):
+    print(time.clock())
+    data_builder.format_to_bert_w_scores(args)
     print(time.clock())
 
 
@@ -37,7 +52,7 @@ def str2bool(v):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-mode", default='', type=str, help='format_to_lines or format_to_bert')
+    parser.add_argument("-mode", default='', type=str, help='fix_missing_period, tokenize, format_to_lines, format_to_bert, format_to_fairseq, or format_to_bert_w_scores')
     parser.add_argument("-oracle_mode", default='greedy', type=str, help='how to generate oracle summaries, greedy or combination, combination will generate more accurate oracles but take much longer time.')
     parser.add_argument("-map_path", default=None)
     parser.add_argument("-raw_path", default=None)
