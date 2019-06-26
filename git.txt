@@ -1,0 +1,6 @@
+msft	https://dev.azure.com/yushisdrg/_git/bertsum (fetch)
+msft	https://dev.azure.com/yushisdrg/_git/bertsum (push)
+origin	https://github.com/shi2yu3/BertSum (fetch)
+origin	https://github.com/shi2yu3/BertSum (push)
+upstream	https://github.com/nlpyang/BertSum (fetch)
+upstream	https://github.com/nlpyang/BertSum (push)
